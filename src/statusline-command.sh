@@ -208,25 +208,17 @@ done
 
 # Allow manual override
 case "${STATUSBAR_LAYOUT:-}" in
-  wide)   TERM_WIDTH=200 ;;
-  medium) TERM_WIDTH=80 ;;
-  narrow) TERM_WIDTH=50 ;;
+  wide)    TERM_WIDTH=200 ;;
+  compact) TERM_WIDTH=50 ;;
 esac
 
 if (( TERM_WIDTH >= 100 )); then
-  # Wide: 3-line layout
+  # Wide: dir + limits on one line, system stats, model
   echo -e "${S_DIR}${SEP}${S_LIMITS}"
   echo -e "${S_SYS}"
   echo -e "${S_MODEL}"
-
-elif (( TERM_WIDTH >= 80 )); then
-  # Medium: 3-line layout
-  echo -e "${S_DIR}"
-  echo -e "${S_LIMITS}"
-  echo -e "${S_MODEL}"
-
 else
-  # Narrow: essential info only
+  # Compact: essentials only
   echo -e "${S_DIR}"
   echo -e "${S_LIMITS}"
   echo -e "${S_MODEL}"

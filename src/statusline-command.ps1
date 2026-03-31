@@ -213,26 +213,19 @@ if (-not $TERM_WIDTH -or $TERM_WIDTH -le 0) { $TERM_WIDTH = 120 }
 # Allow manual override
 if ($env:STATUSBAR_LAYOUT) {
     switch ($env:STATUSBAR_LAYOUT) {
-        'wide'   { $TERM_WIDTH = 200 }
-        'medium' { $TERM_WIDTH = 80 }
-        'narrow' { $TERM_WIDTH = 50 }
+        'wide'    { $TERM_WIDTH = 200 }
+        'compact' { $TERM_WIDTH = 50 }
     }
 }
 
 if ($TERM_WIDTH -ge 100) {
-    # Wide: 3-line layout
+    # Wide: dir + limits on one line, system stats, model
     Write-Host ($S_DIR + $SEP + $S_LIMITS)
     Write-Host $S_SYS
     Write-Host $S_MODEL
 }
-elseif ($TERM_WIDTH -ge 80) {
-    # Medium: 3-line layout
-    Write-Host $S_DIR
-    Write-Host $S_LIMITS
-    Write-Host $S_MODEL
-}
 else {
-    # Narrow: essential info only
+    # Compact: essentials only
     Write-Host $S_DIR
     Write-Host $S_LIMITS
     Write-Host $S_MODEL

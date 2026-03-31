@@ -13,14 +13,7 @@ disk: 128G/460G (28%) · mem: 42% (ok) · batt: 91% ⚡ · 🐳: up (3)
 🧠 Opus 4.6 (1M context)
 ```
 
-**Medium (80-99 columns)**
-```
-awesome-claude-statusbar (main) ✓
-ctx: 62% · 5h: 34% · 7d: 13%
-🧠 Opus 4.6 (1M context)
-```
-
-**Narrow (<80 columns)**
+**Compact (<100 columns)**
 ```
 awesome-claude-statusbar (main) ✓
 ctx: 62% · 5h: 34% · 7d: 13%
@@ -81,13 +74,12 @@ This will pull the latest changes from GitHub and re-run the installer automatic
 
 ## Responsive Layout
 
-The status bar detects your terminal width and switches between three layouts:
+The status bar detects your terminal width and switches between two layouts:
 
 | Terminal Width | Layout | Content |
 |---|---|---|
 | **100+** | Wide | Dir + git, limits, system stats, model |
-| **80-99** | Medium | Dir + git, limits, model |
-| **<80** | Narrow | Dir + git, limits, model |
+| **<100** | Compact | Dir + git, limits, model |
 
 Width detection works by walking the process tree to find the controlling TTY:
 - **macOS**: `stty -f /dev/ttysXXX size`
@@ -97,7 +89,7 @@ Width detection works by walking the process tree to find the controlling TTY:
 You can also force a layout with the `STATUSBAR_LAYOUT` environment variable:
 
 ```bash
-export STATUSBAR_LAYOUT=narrow  # wide | medium | narrow
+export STATUSBAR_LAYOUT=compact  # wide | compact
 ```
 
 ## Smart Installer
