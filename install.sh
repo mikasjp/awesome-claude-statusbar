@@ -74,14 +74,12 @@ else
 fi
 
 # OS
-case "$(uname -s)" in
-  Darwin) ok "Running on ${BOLD}macOS${RST}" ;;
-  Linux)  ok "Running on ${BOLD}Linux${RST}" ;;
-  *)
-    fail "This installer requires macOS or Linux (use install.ps1 for Windows)"
-    exit 1
-    ;;
-esac
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  ok "Running on ${BOLD}macOS${RST}"
+else
+  fail "This installer requires macOS (use install.ps1 for other platforms)"
+  exit 1
+fi
 
 # Source script
 if [[ -f "$SOURCE_SCRIPT" ]]; then
