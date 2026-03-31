@@ -170,27 +170,70 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 # --- Build output ---
 $SEP = " ${DIM}|${RST} "
 
-$L1_1 = "${BOLD}${CYAN}${dir}${RST}${git_part}"
-$L1_2 = "`u{1F9E0} ${WHITE}${model}${RST}"
-$L1_3 = "ctx: ${c_ctx}"
-$L1_4 = "5h: ${c_5h} `u{00B7} 7d: ${c_7d}"
+$dir_short = $dir.Split('/')[-1].Split('\')[-1]
+$S_DIR     = "${BOLD}${CYAN}${dir_short}${RST}${git_part}"
+$S_MODEL   = "`u{1F9E0} ${WHITE}${model}${RST}"
+$S_LIMITS  = "ctx: ${c_ctx} `u{00B7} 5h: ${c_5h} `u{00B7} 7d: ${c_7d}"
+$S_SYS     = "${disk_text} `u{00B7} ${mem_text} `u{00B7} ${batt_text} `u{00B7} ${docker_text}"
 
-$L2_1 = $disk_text
-$L2_2 = $mem_text
-$L2_3 = $batt_text
-$L2_4 = $docker_text
+# Detect terminal width
+$TERM_WIDTH = 0
 
-$cols = @(0, 0, 0, 0)
-$L1 = @($L1_1, $L1_2, $L1_3, $L1_4)
-$L2 = @($L2_1, $L2_2, $L2_3, $L2_4)
-for ($i = 0; $i -lt 4; $i++) {
-    $w1 = Get-VisibleWidth $L1[$i]
-    $w2 = Get-VisibleWidth $L2[$i]
-    $cols[$i] = [math]::Max($w1, $w2)
+if ($IsWindows) {
+    # Windows: parse "mode con" output for Columns
+    $modeOutput = & cmd /c "mode con" 2>$null
+    if ($modeOutput) {
+        $colLine = $modeOutput | Where-Object { $_ -match 'Columns' }
+        if ($colLine -match '(\d+)') { $TERM_WIDTH = [int]$Matches[1] }
+    }
+} else {
+    # macOS/Linux: walk process tree for controlling TTY
+    $sttyFlag = if ($IsMacOS) { '-f' } else { '-F' }
+    $cpid = $PID
+    for ($attempt = 0; $attempt -lt 6; $attempt++) {
+        $ppid = (& ps -o ppid= -p $cpid 2>$null)?.Trim()
+        if (-not $ppid -or $ppid -eq '0' -or $ppid -eq '1') { break }
+        $ttyName = (& ps -o tty= -p $ppid 2>$null)?.Trim()
+        if ($ttyName -and $ttyName -ne '??') {
+            $ttyDev = "/dev/$ttyName"
+            if (-not (Test-Path $ttyDev)) { $ttyDev = "/dev/tty$ttyName" }
+            if (Test-Path $ttyDev) {
+                $sizeOutput = (& stty $sttyFlag $ttyDev size 2>$null)?.Trim()
+                $w = if ($sizeOutput) { ($sizeOutput -split '\s+')[1] } else { $null }
+                if ($w -and [int]$w -gt 0) { $TERM_WIDTH = [int]$w; break }
+            }
+        }
+        $cpid = $ppid
+    }
 }
 
-$line1 = (Pad $L1_1 $cols[0]) + $SEP + (Pad $L1_2 $cols[1]) + $SEP + (Pad $L1_3 $cols[2]) + $SEP + $L1_4
-$line2 = (Pad $L2_1 $cols[0]) + $SEP + (Pad $L2_2 $cols[1]) + $SEP + (Pad $L2_3 $cols[2]) + $SEP + $L2_4
+# Fallback
+if (-not $TERM_WIDTH -or $TERM_WIDTH -le 0) { $TERM_WIDTH = 120 }
 
-Write-Host $line1
-Write-Host $line2
+# Allow manual override
+if ($env:STATUSBAR_LAYOUT) {
+    switch ($env:STATUSBAR_LAYOUT) {
+        'wide'   { $TERM_WIDTH = 200 }
+        'medium' { $TERM_WIDTH = 80 }
+        'narrow' { $TERM_WIDTH = 50 }
+    }
+}
+
+if ($TERM_WIDTH -ge 100) {
+    # Wide: 3-line layout
+    Write-Host ($S_DIR + $SEP + $S_LIMITS)
+    Write-Host $S_SYS
+    Write-Host $S_MODEL
+}
+elseif ($TERM_WIDTH -ge 80) {
+    # Medium: 3-line layout
+    Write-Host $S_DIR
+    Write-Host $S_LIMITS
+    Write-Host $S_MODEL
+}
+else {
+    # Narrow: essential info only
+    Write-Host $S_DIR
+    Write-Host $S_LIMITS
+    Write-Host $S_MODEL
+}

@@ -171,37 +171,63 @@ case "$mem_level" in
   *)  mem_text="mem: ${GREEN}${mem_used}% (ok)${RST}" ;;
 esac
 
-# Build segments for each line (4 columns)
+# Build segments
 SEP=" ${DIM}|${RST} "
 
-L1_1="${BOLD}${CYAN}${dir}${RST}${git_part}"
-L1_2="🧠 ${WHITE}${model}${RST}"
-L1_3="ctx: ${c_ctx}"
-L1_4="5h: ${c_5h} · 7d: ${c_7d}"
-
-L2_1="${disk_text}"
-L2_2="${mem_text}"
+S_DIR="${BOLD}${CYAN}${dir##*/}${RST}${git_part}"
+S_MODEL="🧠 ${WHITE}${model}${RST}"
+S_LIMITS="ctx: ${c_ctx} · 5h: ${c_5h} · 7d: ${c_7d}"
 if [ -n "$batt_pct" ]; then
-  L2_3="batt: ${batt_color}${batt_pct}%${batt_suffix}${RST}"
+  S_BATT="batt: ${batt_color}${batt_pct}%${batt_suffix}${RST}"
 else
-  L2_3="batt: ${DIM}n/a${RST}"
+  S_BATT="batt: ${DIM}n/a${RST}"
 fi
-L2_4="${docker_text}"
+S_SYS="${disk_text} · ${mem_text} · ${S_BATT} · ${docker_text}"
 
-# Compute max width per column
-for i in 1 2 3 4; do
-  eval "w1=\$(vwidth \"\$L1_$i\")"
-  eval "w2=\$(vwidth \"\$L2_$i\")"
-  if (( w1 > w2 )); then
-    eval "COL_$i=$w1"
-  else
-    eval "COL_$i=$w2"
+# Detect terminal width by finding the controlling TTY from the process tree
+TERM_WIDTH=""
+pid=$$
+for _ in 1 2 3 4 5 6; do
+  ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+  [ -z "$ppid" ] || [ "$ppid" = "0" ] || [ "$ppid" = "1" ] && break
+  tty_name=$(ps -o tty= -p "$ppid" 2>/dev/null | tr -d ' ')
+  if [ -n "$tty_name" ] && [ "$tty_name" != "??" ]; then
+    tty_dev="/dev/$tty_name"
+    [ ! -e "$tty_dev" ] && tty_dev="/dev/tty$tty_name"
+    if [ -e "$tty_dev" ]; then
+      w=$(stty size < "$tty_dev" 2>/dev/null | awk '{print $2}')
+      if [ -n "$w" ] && [ "$w" -gt 0 ] 2>/dev/null; then
+        TERM_WIDTH=$w
+        break
+      fi
+    fi
   fi
+  pid=$ppid
 done
+: "${TERM_WIDTH:=120}"
 
-# Build padded lines
-line1="$(pad "$L1_1" "$COL_1")${SEP}$(pad "$L1_2" "$COL_2")${SEP}$(pad "$L1_3" "$COL_3")${SEP}${L1_4}"
-line2="$(pad "$L2_1" "$COL_1")${SEP}$(pad "$L2_2" "$COL_2")${SEP}$(pad "$L2_3" "$COL_3")${SEP}${L2_4}"
+# Allow manual override
+case "${STATUSBAR_LAYOUT:-}" in
+  wide)   TERM_WIDTH=200 ;;
+  medium) TERM_WIDTH=80 ;;
+  narrow) TERM_WIDTH=50 ;;
+esac
 
-echo -e "${line1}"
-echo -e "${line2}"
+if (( TERM_WIDTH >= 100 )); then
+  # Wide: 3-line layout
+  echo -e "${S_DIR}${SEP}${S_LIMITS}"
+  echo -e "${S_SYS}"
+  echo -e "${S_MODEL}"
+
+elif (( TERM_WIDTH >= 80 )); then
+  # Medium: 3-line layout
+  echo -e "${S_DIR}"
+  echo -e "${S_LIMITS}"
+  echo -e "${S_MODEL}"
+
+else
+  # Narrow: essential info only
+  echo -e "${S_DIR}"
+  echo -e "${S_LIMITS}"
+  echo -e "${S_MODEL}"
+fi
