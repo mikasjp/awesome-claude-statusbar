@@ -1,15 +1,13 @@
 #!/usr/bin/env pwsh
 # @awesome-claude-statusbar
-# Claude Code status line — dense developer style with color-coded usage
-# Receives JSON via stdin. Cross-platform (Windows / macOS / Linux).
-# Requires: statusline-platform.ps1 (OS-specific library) in the same directory.
+# Claude Code status line — configurable, color-coded developer dashboard
+# Receives JSON via stdin. Layout controlled by ~/.claude/statusline.conf
 
 $ErrorActionPreference = 'SilentlyContinue'
 
 # Load platform library: installed location or repo lib/ directory
 $platformLib = Join-Path $PSScriptRoot 'statusline-platform.ps1'
 if (-not (Test-Path $platformLib)) {
-    # Fallback: detect platform and load from lib/ (running from repo)
     $pname = if ($IsWindows) { 'windows' } elseif ($IsMacOS) { 'darwin' } else { 'linux' }
     $platformLib = Join-Path $PSScriptRoot "lib/platform-${pname}.ps1"
 }
@@ -30,13 +28,13 @@ $r5h       = [math]::Round([double]($json.rate_limits.five_hour.used_percentage 
 $r7d       = [math]::Round([double]($json.rate_limits.seven_day.used_percentage ?? 0))
 $orig_dir  = $dir
 
-# Simplify path: ~/... relative to home
+# Simplify path
 $home_path = [Environment]::GetFolderPath('UserProfile')
 if ($dir -and $dir.StartsWith($home_path)) {
     $dir = '~' + $dir.Substring($home_path.Length)
 }
 
-# Strip "Claude " prefix from model name
+# Strip "Claude " prefix
 if ($model.StartsWith('Claude ')) {
     $model = $model.Substring(7)
 }
@@ -52,8 +50,6 @@ $RED     = "$ESC[31m"
 $CYAN    = "$ESC[36m"
 $WHITE   = "$ESC[37m"
 
-# --- Utility functions ---
-
 function Color-Usage([int]$val) {
     if ($val -lt 50)     { return "${GREEN}${val}%${RST}" }
     elseif ($val -lt 80) { return "${YELLOW}${val}%${RST}" }
@@ -68,21 +64,16 @@ function Color-Level([string]$level) {
     }
 }
 
-function Get-VisibleWidth([string]$text) {
-    $stripped = $text -replace "$ESC\[[0-9;]*m", ''
-    return $stripped.Length
+# --- Segment rendering functions ---
+
+function Render-Dir {
+    return "${BOLD}${CYAN}${dir}${RST}"
 }
 
-function Pad([string]$text, [int]$target) {
-    $w = Get-VisibleWidth $text
-    $spaces = $target - $w
-    if ($spaces -gt 0) { return $text + (' ' * $spaces) }
-    return $text
-}
+function Render-Git {
+    if (-not $orig_dir -or -not (Get-Command git -ErrorAction SilentlyContinue)) { return $null }
+    if (-not (& git -C $orig_dir rev-parse --is-inside-work-tree 2>$null)) { return $null }
 
-# --- Git branch + status ---
-$git_part = ''
-if ($orig_dir -and (Get-Command git -ErrorAction SilentlyContinue) -and (& git -C $orig_dir rev-parse --is-inside-work-tree 2>$null)) {
     $branch = & git -C $orig_dir symbolic-ref --short HEAD 2>$null
     if (-not $branch) {
         $branch = & git -C $orig_dir rev-parse --short HEAD 2>$null
@@ -116,81 +107,131 @@ if ($orig_dir -and (Get-Command git -ErrorAction SilentlyContinue) -and (& git -
         if ($behind -gt 0) { $indicator += [char]0x2193 + $behind }
     }
 
-    $git_part = " (${GREEN}${branch}${RST}) ${indicator_color}${indicator}${RST}"
+    return "(${GREEN}${branch}${RST}) ${indicator_color}${indicator}${RST}"
 }
 
-# --- Collect data from platform library ---
-$c_ctx = Color-Usage $ctx
-$c_5h  = Color-Usage $r5h
-$c_7d  = Color-Usage $r7d
-
-$batt = Get-BatteryInfo
-$disk = Get-DiskInfo
-$mem  = Get-MemoryInfo
-
-# --- Format battery ---
-if ($null -ne $batt.Percent) {
-    $batt_suffix = if ($batt.IsCharging) { " $([char]0x26A1)" } else { '' }
-    if ($batt.Percent -gt 50)     { $batt_color = $GREEN }
-    elseif ($batt.Percent -gt 20) { $batt_color = $YELLOW }
-    else                          { $batt_color = $RED }
-    $batt_text = "batt: ${batt_color}$($batt.Percent)%${batt_suffix}${RST}"
-} else {
-    $batt_text = "batt: ${DIM}n/a${RST}"
+function Render-Model {
+    return "`u{1F9E0} ${WHITE}${model}${RST}"
 }
 
-# --- Format disk ---
-if ($disk.TotalGB -gt 0) {
-    if ($disk.FreeGB -gt 50)     { $disk_color = $GREEN }
-    elseif ($disk.FreeGB -gt 10) { $disk_color = $YELLOW }
-    else                         { $disk_color = $RED }
-    $disk_text = "disk: ${disk_color}$($disk.UsedGB)G/$($disk.TotalGB)G ($([math]::Round($disk.UsedGB * 100 / $disk.TotalGB))%)${RST}"
-} else {
-    $disk_text = "disk: ${DIM}?${RST}"
+function Render-Context {
+    return "ctx: $(Color-Usage $ctx)"
 }
 
-# --- Format memory ---
-$mem_color = Color-Level $mem.Level
-$mem_text = "mem: ${mem_color}$($mem.UsedPercent)% ($($mem.Level))${RST}"
+function Render-RateLimits {
+    return "5h: $(Color-Usage $r5h) `u{00B7} 7d: $(Color-Usage $r7d)"
+}
 
-# --- Docker status ---
-$docker_text = ''
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    $docker_text = "`u{1F433}: n/a"
-} else {
+function Render-Disk {
+    $disk = Get-DiskInfo
+    if ($disk.TotalGB -gt 0) {
+        if ($disk.FreeGB -gt 50)     { $disk_color = $GREEN }
+        elseif ($disk.FreeGB -gt 10) { $disk_color = $YELLOW }
+        else                         { $disk_color = $RED }
+        return "disk: ${disk_color}$($disk.UsedGB)G/$($disk.TotalGB)G ($([math]::Round($disk.UsedGB * 100 / $disk.TotalGB))%)${RST}"
+    }
+    return "disk: ${DIM}?${RST}"
+}
+
+function Render-Mem {
+    $mem = Get-MemoryInfo
+    $mem_color = Color-Level $mem.Level
+    return "mem: ${mem_color}$($mem.UsedPercent)% ($($mem.Level))${RST}"
+}
+
+function Render-Batt {
+    $batt = Get-BatteryInfo
+    if ($null -ne $batt.Percent) {
+        $batt_suffix = if ($batt.IsCharging) { " $([char]0x26A1)" } else { '' }
+        if ($batt.Percent -gt 50)     { $batt_color = $GREEN }
+        elseif ($batt.Percent -gt 20) { $batt_color = $YELLOW }
+        else                          { $batt_color = $RED }
+        return "batt: ${batt_color}$($batt.Percent)%${batt_suffix}${RST}"
+    }
+    return "batt: ${DIM}n/a${RST}"
+}
+
+function Render-Docker {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return "`u{1F433}: n/a"
+    }
     $containers = & docker ps -q 2>$null
     if ($LASTEXITCODE -eq 0) {
         $container_count = if ($containers) { @($containers).Count } else { 0 }
-        $docker_text = "`u{1F433}: ${GREEN}up (${container_count})${RST}"
-    } else {
-        $docker_text = "`u{1F433}: ${DIM}down${RST}"
+        return "`u{1F433}: ${GREEN}up (${container_count})${RST}"
     }
+    return "`u{1F433}: ${DIM}down${RST}"
+}
+
+# --- Config parsing ---
+
+$ConfigFile = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.claude/statusline.conf'
+$DefaultSegments = @('dir','git','model','context','rate_limits','---','disk','mem','batt','docker')
+
+function Read-StatusConfig {
+    if (-not (Test-Path $ConfigFile)) { return $null }
+    $segments = @()
+    $hasSegments = $false
+    foreach ($rawLine in Get-Content $ConfigFile) {
+        # Strip comments
+        $line = ($rawLine -replace '#.*', '').Trim()
+        if (-not $line) { continue }
+        if ($line -match '^---+$') {
+            $segments += '---'
+        } else {
+            $segments += $line.ToLower()
+            $hasSegments = $true
+        }
+    }
+    if ($hasSegments) { return ,$segments }
+    return $null
 }
 
 # --- Build output ---
-$SEP = " ${DIM}|${RST} "
 
-$L1_1 = "${BOLD}${CYAN}${dir}${RST}${git_part}"
-$L1_2 = "`u{1F9E0} ${WHITE}${model}${RST}"
-$L1_3 = "ctx: ${c_ctx}"
-$L1_4 = "5h: ${c_5h} `u{00B7} 7d: ${c_7d}"
-
-$L2_1 = $disk_text
-$L2_2 = $mem_text
-$L2_3 = $batt_text
-$L2_4 = $docker_text
-
-$cols = @(0, 0, 0, 0)
-$L1 = @($L1_1, $L1_2, $L1_3, $L1_4)
-$L2 = @($L2_1, $L2_2, $L2_3, $L2_4)
-for ($i = 0; $i -lt 4; $i++) {
-    $w1 = Get-VisibleWidth $L1[$i]
-    $w2 = Get-VisibleWidth $L2[$i]
-    $cols[$i] = [math]::Max($w1, $w2)
+$config = Read-StatusConfig
+if (-not $config) {
+    $config = $DefaultSegments
 }
 
-$line1 = (Pad $L1_1 $cols[0]) + $SEP + (Pad $L1_2 $cols[1]) + $SEP + (Pad $L1_3 $cols[2]) + $SEP + $L1_4
-$line2 = (Pad $L2_1 $cols[0]) + $SEP + (Pad $L2_2 $cols[1]) + $SEP + (Pad $L2_3 $cols[2]) + $SEP + $L2_4
+$SEP = " ${DIM}|${RST} "
+$currentRow = @()
+$prevSeg = ''
 
-Write-Host $line1
-Write-Host $line2
+foreach ($seg in $config) {
+    if ($seg -eq '---') {
+        if ($currentRow.Count -gt 0) {
+            Write-Host ($currentRow -join $SEP)
+            $currentRow = @()
+        }
+        $prevSeg = ''
+        continue
+    }
+
+    $cell = switch ($seg) {
+        'dir'         { Render-Dir }
+        'git'         { Render-Git }
+        'model'       { Render-Model }
+        'context'     { Render-Context }
+        'rate_limits' { Render-RateLimits }
+        'disk'        { Render-Disk }
+        'mem'         { Render-Mem }
+        'batt'        { Render-Batt }
+        'docker'      { Render-Docker }
+        default       { $null }
+    }
+
+    if ($null -eq $cell) { continue }
+
+    # git after dir -> append to same cell (preserves "~/path (main) ✓" look)
+    if ($seg -eq 'git' -and $prevSeg -eq 'dir' -and $currentRow.Count -gt 0) {
+        $currentRow[-1] += " $cell"
+    } else {
+        $currentRow += $cell
+    }
+    $prevSeg = $seg
+}
+
+if ($currentRow.Count -gt 0) {
+    Write-Host ($currentRow -join $SEP)
+}

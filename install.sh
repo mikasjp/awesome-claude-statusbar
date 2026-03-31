@@ -7,8 +7,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_SCRIPT="$SCRIPT_DIR/src/statusline-command.sh"
+SOURCE_CONFIG="$SCRIPT_DIR/src/statusline.conf.default"
 DEST_DIR="$HOME/.claude"
 DEST_SCRIPT="$DEST_DIR/statusline-command.sh"
+DEST_CONFIG="$DEST_DIR/statusline.conf"
 SETTINGS_FILE="$DEST_DIR/settings.json"
 SIGNATURE="@awesome-claude-statusbar"
 
@@ -72,12 +74,14 @@ else
 fi
 
 # OS
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  ok "Running on ${BOLD}macOS${RST}"
-else
-  fail "This installer requires macOS (use install.ps1 for other platforms)"
-  exit 1
-fi
+case "$(uname -s)" in
+  Darwin) ok "Running on ${BOLD}macOS${RST}" ;;
+  Linux)  ok "Running on ${BOLD}Linux${RST}" ;;
+  *)
+    fail "This installer requires macOS or Linux (use install.ps1 for Windows)"
+    exit 1
+    ;;
+esac
 
 # Source script
 if [[ -f "$SOURCE_SCRIPT" ]]; then
@@ -181,6 +185,14 @@ fi
 cp "$SOURCE_SCRIPT" "$DEST_SCRIPT"
 chmod +x "$DEST_SCRIPT"
 ok "Installed ${DIM}${DEST_SCRIPT}${RST}"
+
+# Install default config (preserve existing)
+if [[ -f "$DEST_CONFIG" ]]; then
+  ok "Config preserved ${DIM}${DEST_CONFIG}${RST}"
+else
+  cp "$SOURCE_CONFIG" "$DEST_CONFIG"
+  ok "Default config ${DIM}${DEST_CONFIG}${RST}"
+fi
 
 # ── Configure settings.json ──────────────────────────────────────────────────
 

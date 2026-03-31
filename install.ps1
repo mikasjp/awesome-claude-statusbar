@@ -17,6 +17,8 @@ $LibDir         = Join-Path $SrcDir 'lib'
 $DestDir        = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.claude'
 $DestScript     = Join-Path $DestDir 'statusline-command.ps1'
 $DestPlatform   = Join-Path $DestDir 'statusline-platform.ps1'
+$SourceConfig   = Join-Path $SrcDir 'statusline.conf.default'
+$DestConfig     = Join-Path $DestDir 'statusline.conf'
 $SettingsFile   = Join-Path $DestDir 'settings.json'
 $Signature      = '@awesome-claude-statusbar'
 
@@ -210,6 +212,14 @@ Write-Ok "Main script ${DIM}${DestScript}${RST}"
 # Copy platform library
 Copy-Item $SourcePlatform $DestPlatform -Force
 Write-Ok "Platform library ${DIM}(${platform}) ${DestPlatform}${RST}"
+
+# Install default config (preserve existing)
+if (Test-Path $DestConfig) {
+    Write-Ok "Config preserved ${DIM}${DestConfig}${RST}"
+} else {
+    Copy-Item $SourceConfig $DestConfig -Force
+    Write-Ok "Default config ${DIM}${DestConfig}${RST}"
+}
 
 # ── Configure settings.json ──────────────────────────────────────────────────
 

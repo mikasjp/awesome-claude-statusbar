@@ -50,6 +50,61 @@ pwsh install.ps1
 
 Then restart Claude Code.
 
+## Configuration
+
+The layout is controlled by `~/.claude/statusline.conf`. The installer creates one with the default layout; edit it to reorder, add, or remove segments.
+
+```
+# One segment per line, in display order. Comment out to disable.
+# Use "---" to start a new row.
+#
+# Available: dir, git, model, context, rate_limits, disk, mem, batt, docker
+
+dir
+git
+model
+context
+rate_limits
+---
+disk
+mem
+batt
+docker
+```
+
+### Examples
+
+**Mobile-friendly** -- put the most useful info first, single row:
+
+```
+model
+context
+rate_limits
+dir
+git
+```
+
+**Minimal** -- just context and rate limits:
+
+```
+context
+rate_limits
+```
+
+**No system stats** -- disable the second row by removing or commenting out:
+
+```
+dir
+git
+model
+context
+rate_limits
+```
+
+When `git` immediately follows `dir`, they render as one combined cell (`~/path (main) ✓`). In any other position, `git` renders standalone.
+
+Disabled segments skip their system calls entirely, so removing `docker` avoids the `docker ps` call (which can be slow when the daemon is unresponsive).
+
 ## Smart Installer
 
 The installer is more than just a file copier:
@@ -74,6 +129,7 @@ A single self-contained script. macOS only.
 ```
 src/
   statusline-command.sh          # Everything in one file
+  statusline.conf.default        # Default layout config (shared)
 ```
 
 ### PowerShell version
@@ -83,6 +139,7 @@ Modular, cross-platform architecture with OS-specific platform libraries:
 ```
 src/
   statusline-command.ps1         # Main script (OS-agnostic)
+  statusline.conf.default        # Default layout config (shared)
   lib/
     platform-darwin.ps1          # macOS provider
     platform-windows.ps1         # Windows provider
@@ -134,14 +191,14 @@ Remove the scripts and the `statusLine` config from your settings:
 ### Bash
 
 ```bash
-rm -f ~/.claude/statusline-command.sh
+rm -f ~/.claude/statusline-command.sh ~/.claude/statusline.conf
 jq 'del(.statusLine)' ~/.claude/settings.json > ~/.claude/settings.tmp && mv ~/.claude/settings.tmp ~/.claude/settings.json
 ```
 
 ### PowerShell
 
 ```powershell
-Remove-Item ~/.claude/statusline-command.ps1, ~/.claude/statusline-platform.ps1 -ErrorAction SilentlyContinue
+Remove-Item ~/.claude/statusline-command.ps1, ~/.claude/statusline-platform.ps1, ~/.claude/statusline.conf -ErrorAction SilentlyContinue
 $s = Get-Content ~/.claude/settings.json -Raw | ConvertFrom-Json; $s.PSObject.Properties.Remove('statusLine'); $s | ConvertTo-Json -Depth 10 | Set-Content ~/.claude/settings.json
 ```
 

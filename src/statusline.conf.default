@@ -1,0 +1,26 @@
+# Awesome Claude Status Bar — layout config
+#
+# One segment per line, in display order. Comment out or delete to disable.
+# Use "---" to start a new row. Blank lines and # comments are ignored.
+#
+# Available segments:
+#   dir          Current directory (~/...)
+#   git          Branch name + dirty/clean/ahead/behind indicators
+#   model        Active Claude model
+#   context      Context window usage %
+#   rate_limits  5-hour and 7-day rate limit usage
+#   disk         Disk space used / total
+#   mem          Memory pressure (ok/warn/critical)
+#   batt         Battery charge + charging indicator
+#   docker       Docker daemon status + container count
+
+dir
+git
+model
+context
+rate_limits
+---
+disk
+mem
+batt
+docker
