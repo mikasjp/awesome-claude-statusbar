@@ -24,15 +24,15 @@ Everything is color-coded: **green** when you're comfortable, **yellow** when yo
 
 ## What You Get
 
-| Segment | What it shows |
-|---------|---------------|
-| **Directory + Git** | Current directory name, branch, staged/unstaged/untracked indicators, ahead/behind upstream |
-| **Model** | Active Claude model name |
-| **Context & Rate limits** | Context window usage, 5-hour and 7-day rate limit usage |
-| **Disk** | Used / total with percentage |
-| **Memory** | System memory pressure with ok/warn/critical levels |
-| **Battery** | Charge percentage + charging indicator |
-| **Docker** | Daemon status and running container count |
+| Segment | What it shows | Configurable |
+|---------|---------------|:---:|
+| **Directory + Git** | Current directory name, branch, staged/unstaged/untracked indicators, ahead/behind upstream | always on |
+| **Context & Rate limits** | Context window usage, 5-hour and 7-day rate limit usage | always on |
+| **Model** | Active Claude model name | yes |
+| **Disk** | Used / total with percentage | yes |
+| **Memory** | System memory pressure with ok/warn/critical levels | yes |
+| **Battery** | Charge percentage + charging indicator | yes |
+| **Docker** | Daemon status and running container count | yes |
 
 Git indicators: `✓` clean, `●` staged, `○` unstaged, `+` untracked, `↑↓` ahead/behind.
 
@@ -61,6 +61,39 @@ pwsh install.ps1
 ```
 
 Then restart Claude Code.
+
+## Configuration
+
+The installer creates a config file at `~/.claude/awesome-statusbar.json` where you can toggle individual segments on or off:
+
+```json
+{
+  "segments": {
+    "disk": true,
+    "mem": true,
+    "batt": true,
+    "docker": true,
+    "model": true
+  }
+}
+```
+
+Set any segment to `false` to hide it. Changes take effect on the next statusline refresh -- no restart needed.
+
+### Using the configurator
+
+The installer registers a `/configure-statusbar` skill in Claude Code. Use it interactively:
+
+```
+/configure-statusbar
+```
+
+Or pass arguments directly:
+
+```
+/configure-statusbar disable docker batt
+/configure-statusbar enable disk
+```
 
 ## Updating
 
@@ -100,7 +133,8 @@ The installer is more than just a file copier:
 - **Detects existing installations** -- if Awesome Claude Status Bar is already installed, it cleanly removes the old version and installs fresh
 - **Respects foreign scripts** -- if you have a different status bar script configured, the installer stops and warns you instead of silently overwriting it
 - **Force mode** -- override foreign script detection with `--force` (bash) or `-Force` (PowerShell); the foreign script is backed up as `.bak` before overwriting
-- **Installs `/update-statusbar` skill** -- registers a global Claude Code skill for easy future updates
+- **Creates default config** -- writes `~/.claude/awesome-statusbar.json` with all segments enabled (preserves existing config on reinstall)
+- **Installs skills** -- registers `/update-statusbar` and `/configure-statusbar` globally
 
 ```bash
 # Override a foreign status line script
@@ -148,10 +182,12 @@ The installer detects your OS and copies the right library as `statusline-platfo
 src/
   skills/
     update-statusbar/
-      SKILL.md                   # /update-statusbar skill definition
+      SKILL.md                   # /update-statusbar — pull latest and reinstall
+    configure-statusbar/
+      SKILL.md                   # /configure-statusbar — toggle segments on/off
 ```
 
-The skill is installed to `~/.claude/skills/update-statusbar/SKILL.md` and handles cloning/pulling the repo and running the appropriate installer.
+Skills are installed to `~/.claude/skills/` and available globally in all Claude Code sessions.
 
 ## How it works
 
@@ -183,21 +219,21 @@ The installer writes this configuration for you:
 
 ## Uninstalling
 
-Remove the scripts, skill, and the `statusLine` config from your settings:
+Remove the scripts, config, skills, and the `statusLine` config from your settings:
 
 ### Bash
 
 ```bash
-rm -f ~/.claude/statusline-command.sh
-rm -rf ~/.claude/skills/update-statusbar
+rm -f ~/.claude/statusline-command.sh ~/.claude/awesome-statusbar.json
+rm -rf ~/.claude/skills/update-statusbar ~/.claude/skills/configure-statusbar
 jq 'del(.statusLine)' ~/.claude/settings.json > ~/.claude/settings.tmp && mv ~/.claude/settings.tmp ~/.claude/settings.json
 ```
 
 ### PowerShell
 
 ```powershell
-Remove-Item ~/.claude/statusline-command.ps1, ~/.claude/statusline-platform.ps1 -ErrorAction SilentlyContinue
-Remove-Item ~/.claude/skills/update-statusbar -Recurse -ErrorAction SilentlyContinue
+Remove-Item ~/.claude/statusline-command.ps1, ~/.claude/statusline-platform.ps1, ~/.claude/awesome-statusbar.json -ErrorAction SilentlyContinue
+Remove-Item ~/.claude/skills/update-statusbar, ~/.claude/skills/configure-statusbar -Recurse -ErrorAction SilentlyContinue
 $s = Get-Content ~/.claude/settings.json -Raw | ConvertFrom-Json; $s.PSObject.Properties.Remove('statusLine'); $s | ConvertTo-Json -Depth 10 | Set-Content ~/.claude/settings.json
 ```
 

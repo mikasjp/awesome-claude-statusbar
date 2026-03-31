@@ -30,6 +30,25 @@ $r5h       = [math]::Round([double]($json.rate_limits.five_hour.used_percentage 
 $r7d       = [math]::Round([double]($json.rate_limits.seven_day.used_percentage ?? 0))
 $orig_dir  = $dir
 
+# --- Read config file ---
+$ConfigFile = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.claude/awesome-statusbar.json'
+$show_disk   = $true
+$show_mem    = $true
+$show_batt   = $true
+$show_docker = $true
+$show_model  = $true
+
+if (Test-Path $ConfigFile) {
+    $cfg = Get-Content -Raw $ConfigFile | ConvertFrom-Json
+    if ($cfg.segments) {
+        if ($null -ne $cfg.segments.disk)   { $show_disk   = [bool]$cfg.segments.disk }
+        if ($null -ne $cfg.segments.mem)    { $show_mem    = [bool]$cfg.segments.mem }
+        if ($null -ne $cfg.segments.batt)   { $show_batt   = [bool]$cfg.segments.batt }
+        if ($null -ne $cfg.segments.docker) { $show_docker = [bool]$cfg.segments.docker }
+        if ($null -ne $cfg.segments.model)  { $show_model  = [bool]$cfg.segments.model }
+    }
+}
+
 # Simplify path: ~/... relative to home
 $home_path = [Environment]::GetFolderPath('UserProfile')
 if ($dir -and $dir.StartsWith($home_path)) {
@@ -124,46 +143,60 @@ $c_ctx = Color-Usage $ctx
 $c_5h  = Color-Usage $r5h
 $c_7d  = Color-Usage $r7d
 
-$batt = Get-BatteryInfo
-$disk = Get-DiskInfo
-$mem  = Get-MemoryInfo
-
-# --- Format battery ---
-if ($null -ne $batt.Percent) {
-    $batt_suffix = if ($batt.IsCharging) { " $([char]0x26A1)" } else { '' }
-    if ($batt.Percent -gt 50)     { $batt_color = $GREEN }
-    elseif ($batt.Percent -gt 20) { $batt_color = $YELLOW }
-    else                          { $batt_color = $RED }
-    $batt_text = "batt: ${batt_color}$($batt.Percent)%${batt_suffix}${RST}"
-} else {
-    $batt_text = "batt: ${DIM}n/a${RST}"
-}
-
-# --- Format disk ---
-if ($disk.TotalGB -gt 0) {
-    if ($disk.FreeGB -gt 50)     { $disk_color = $GREEN }
-    elseif ($disk.FreeGB -gt 10) { $disk_color = $YELLOW }
-    else                         { $disk_color = $RED }
-    $disk_text = "disk: ${disk_color}$($disk.UsedGB)G/$($disk.TotalGB)G ($([math]::Round($disk.UsedGB * 100 / $disk.TotalGB))%)${RST}"
-} else {
-    $disk_text = "disk: ${DIM}?${RST}"
-}
-
-# --- Format memory ---
-$mem_color = Color-Level $mem.Level
-$mem_text = "mem: ${mem_color}$($mem.UsedPercent)% ($($mem.Level))${RST}"
-
-# --- Docker status ---
+$batt_text   = ''
+$disk_text   = ''
+$mem_text    = ''
 $docker_text = ''
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    $docker_text = "`u{1F433}: n/a"
-} else {
-    $containers = & docker ps -q 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        $container_count = if ($containers) { @($containers).Count } else { 0 }
-        $docker_text = "`u{1F433}: ${GREEN}up (${container_count})${RST}"
+
+if ($show_batt) {
+    $batt = Get-BatteryInfo
+
+    # --- Format battery ---
+    if ($null -ne $batt.Percent) {
+        $batt_suffix = if ($batt.IsCharging) { " $([char]0x26A1)" } else { '' }
+        if ($batt.Percent -gt 50)     { $batt_color = $GREEN }
+        elseif ($batt.Percent -gt 20) { $batt_color = $YELLOW }
+        else                          { $batt_color = $RED }
+        $batt_text = "batt: ${batt_color}$($batt.Percent)%${batt_suffix}${RST}"
     } else {
-        $docker_text = "`u{1F433}: ${DIM}down${RST}"
+        $batt_text = "batt: ${DIM}n/a${RST}"
+    }
+}
+
+if ($show_disk) {
+    $disk = Get-DiskInfo
+
+    # --- Format disk ---
+    if ($disk.TotalGB -gt 0) {
+        if ($disk.FreeGB -gt 50)     { $disk_color = $GREEN }
+        elseif ($disk.FreeGB -gt 10) { $disk_color = $YELLOW }
+        else                         { $disk_color = $RED }
+        $disk_text = "disk: ${disk_color}$($disk.UsedGB)G/$($disk.TotalGB)G ($([math]::Round($disk.UsedGB * 100 / $disk.TotalGB))%)${RST}"
+    } else {
+        $disk_text = "disk: ${DIM}?${RST}"
+    }
+}
+
+if ($show_mem) {
+    $mem = Get-MemoryInfo
+
+    # --- Format memory ---
+    $mem_color = Color-Level $mem.Level
+    $mem_text = "mem: ${mem_color}$($mem.UsedPercent)% ($($mem.Level))${RST}"
+}
+
+if ($show_docker) {
+    # --- Docker status ---
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        $docker_text = "`u{1F433}: n/a"
+    } else {
+        $containers = & docker ps -q 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $container_count = if ($containers) { @($containers).Count } else { 0 }
+            $docker_text = "`u{1F433}: ${GREEN}up (${container_count})${RST}"
+        } else {
+            $docker_text = "`u{1F433}: ${DIM}down${RST}"
+        }
     }
 }
 
@@ -174,7 +207,14 @@ $dir_short = $dir.Split('/')[-1].Split('\')[-1]
 $S_DIR     = "${BOLD}${CYAN}${dir_short}${RST}${git_part}"
 $S_MODEL   = "`u{1F9E0} ${WHITE}${model}${RST}"
 $S_LIMITS  = "ctx: ${c_ctx} `u{00B7} 5h: ${c_5h} `u{00B7} 7d: ${c_7d}"
-$S_SYS     = "${disk_text} `u{00B7} ${mem_text} `u{00B7} ${batt_text} `u{00B7} ${docker_text}"
+
+# Build S_SYS dynamically from enabled segments
+$sys_parts = @()
+if ($show_disk   -and $disk_text)   { $sys_parts += $disk_text }
+if ($show_mem    -and $mem_text)    { $sys_parts += $mem_text }
+if ($show_batt   -and $batt_text)   { $sys_parts += $batt_text }
+if ($show_docker -and $docker_text) { $sys_parts += $docker_text }
+$S_SYS     = $sys_parts -join " `u{00B7} "
 
 # Detect terminal width
 $TERM_WIDTH = 0
@@ -221,12 +261,12 @@ if ($env:STATUSBAR_LAYOUT) {
 if ($TERM_WIDTH -ge 100) {
     # Wide: dir + limits on one line, system stats, model
     Write-Host ($S_DIR + $SEP + $S_LIMITS)
-    Write-Host $S_SYS
-    Write-Host $S_MODEL
+    if ($S_SYS) { Write-Host $S_SYS }
+    if ($show_model) { Write-Host $S_MODEL }
 }
 else {
     # Compact: essentials only
     Write-Host $S_DIR
     Write-Host $S_LIMITS
-    Write-Host $S_MODEL
+    if ($show_model) { Write-Host $S_MODEL }
 }

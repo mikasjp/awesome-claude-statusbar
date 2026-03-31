@@ -13,12 +13,13 @@ $ErrorActionPreference = 'Stop'
 $ScriptDir      = $PSScriptRoot
 $SrcDir         = Join-Path $ScriptDir 'src'
 $SourceScript   = Join-Path $SrcDir 'statusline-command.ps1'
-$SourceSkill    = Join-Path $SrcDir 'skills/update-statusbar/SKILL.md'
+$SourceSkillsDir = Join-Path $SrcDir 'skills'
 $LibDir         = Join-Path $SrcDir 'lib'
 $DestDir        = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.claude'
 $DestScript     = Join-Path $DestDir 'statusline-command.ps1'
 $DestPlatform   = Join-Path $DestDir 'statusline-platform.ps1'
-$DestSkillDir   = Join-Path $DestDir 'skills/update-statusbar'
+$DestSkillsDir  = Join-Path $DestDir 'skills'
+$ConfigFile     = Join-Path $DestDir 'awesome-statusbar.json'
 $SettingsFile   = Join-Path $DestDir 'settings.json'
 $Signature      = '@awesome-claude-statusbar'
 
@@ -238,20 +239,42 @@ if (Test-Path $SettingsFile) {
     Write-Ok "Created ${DIM}${SettingsFile}${RST}"
 }
 
-# ── Install skill ────────────────────────────────────────────────────────────
+# ── Create default config ────────────────────────────────────────────────────
 
-Write-Header "`u{1F527} Installing /update-statusbar skill"
+Write-Header "`u{1F4CB} Configuration"
 
-if (Test-Path $SourceSkill) {
-    if (-not (Test-Path $DestSkillDir)) {
-        New-Item -ItemType Directory -Path $DestSkillDir -Force | Out-Null
-    }
-    Copy-Item $SourceSkill (Join-Path $DestSkillDir 'SKILL.md') -Force
-    Write-Ok "Installed ${DIM}${DestSkillDir}/SKILL.md${RST}"
-    Write-Step "Run ${BOLD}/update-statusbar${RST} in Claude Code to update in the future"
+if (Test-Path $ConfigFile) {
+    Write-Ok "Config already exists ${DIM}${ConfigFile}${RST} `u{2014} keeping"
 } else {
-    Write-Warn "Skill file not found `u{2014} skipping"
-    $warnings++
+    $defaultConfig = @{
+        segments = @{
+            disk   = $true
+            mem    = $true
+            batt   = $true
+            docker = $true
+            model  = $true
+        }
+    }
+    $defaultConfig | ConvertTo-Json -Depth 5 | Set-Content $ConfigFile -Encoding UTF8
+    Write-Ok "Created default config ${DIM}${ConfigFile}${RST}"
+}
+Write-Step "Run ${BOLD}/configure-statusbar${RST} in Claude Code to toggle segments"
+
+# ── Install skills ───────────────────────────────────────────────────────────
+
+Write-Header "`u{1F527} Installing skills"
+
+Get-ChildItem -Path $SourceSkillsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $skillName = $_.Name
+    $skillFile = Join-Path $_.FullName 'SKILL.md'
+    if (Test-Path $skillFile) {
+        $destDir = Join-Path $DestSkillsDir $skillName
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+        Copy-Item $skillFile (Join-Path $destDir 'SKILL.md') -Force
+        Write-Ok "/${skillName} ${DIM}${destDir}/SKILL.md${RST}"
+    }
 }
 
 # ── Summary ──────────────────────────────────────────────────────────────────

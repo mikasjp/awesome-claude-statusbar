@@ -7,10 +7,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_SCRIPT="$SCRIPT_DIR/src/statusline-command.sh"
-SOURCE_SKILL="$SCRIPT_DIR/src/skills/update-statusbar/SKILL.md"
+SOURCE_SKILLS_DIR="$SCRIPT_DIR/src/skills"
 DEST_DIR="$HOME/.claude"
 DEST_SCRIPT="$DEST_DIR/statusline-command.sh"
-DEST_SKILL_DIR="$DEST_DIR/skills/update-statusbar"
+DEST_SKILLS_DIR="$DEST_DIR/skills"
+CONFIG_FILE="$DEST_DIR/awesome-statusbar.json"
 SETTINGS_FILE="$DEST_DIR/settings.json"
 SIGNATURE="@awesome-claude-statusbar"
 
@@ -200,19 +201,40 @@ else
   ok "Created ${DIM}${SETTINGS_FILE}${RST}"
 fi
 
-# ── Install skill ────────────────────────────────────────────────────────────
+# ── Create default config ────────────────────────────────────────────────────
 
-header "🔧 Installing /update-statusbar skill"
+header "📋 Configuration"
 
-if [[ -f "$SOURCE_SKILL" ]]; then
-  mkdir -p "$DEST_SKILL_DIR"
-  cp "$SOURCE_SKILL" "$DEST_SKILL_DIR/SKILL.md"
-  ok "Installed ${DIM}${DEST_SKILL_DIR}/SKILL.md${RST}"
-  step "Run ${BOLD}/update-statusbar${RST} in Claude Code to update in the future"
+if [[ -f "$CONFIG_FILE" ]]; then
+  ok "Config already exists ${DIM}${CONFIG_FILE}${RST} — keeping"
 else
-  warn "Skill file not found — skipping"
-  warnings=$((warnings + 1))
+  cat > "$CONFIG_FILE" <<'CFGEOF'
+{
+  "segments": {
+    "disk": true,
+    "mem": true,
+    "batt": true,
+    "docker": true,
+    "model": true
+  }
+}
+CFGEOF
+  ok "Created default config ${DIM}${CONFIG_FILE}${RST}"
 fi
+step "Run ${BOLD}/configure-statusbar${RST} in Claude Code to toggle segments"
+
+# ── Install skills ───────────────────────────────────────────────────────────
+
+header "🔧 Installing skills"
+
+for skill_dir in "$SOURCE_SKILLS_DIR"/*/; do
+  skill_name=$(basename "$skill_dir")
+  if [[ -f "$skill_dir/SKILL.md" ]]; then
+    mkdir -p "$DEST_SKILLS_DIR/$skill_name"
+    cp "$skill_dir/SKILL.md" "$DEST_SKILLS_DIR/$skill_name/SKILL.md"
+    ok "/${skill_name} ${DIM}${DEST_SKILLS_DIR}/${skill_name}/SKILL.md${RST}"
+  fi
+done
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 

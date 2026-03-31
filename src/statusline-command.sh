@@ -13,6 +13,22 @@ ctx=$(echo "$DATA" | jq -r '.context_window.used_percentage // 0' | xargs printf
 r5h=$(echo "$DATA" | jq -r '.rate_limits.five_hour.used_percentage // 0' | xargs printf "%.0f")
 r7d=$(echo "$DATA" | jq -r '.rate_limits.seven_day.used_percentage // 0' | xargs printf "%.0f")
 
+# Read config file for segment visibility
+CONFIG_FILE="$HOME/.claude/awesome-statusbar.json"
+if [ -f "$CONFIG_FILE" ]; then
+  show_disk=$(jq -r 'if .segments.disk == false then "false" else "true" end' "$CONFIG_FILE")
+  show_mem=$(jq -r 'if .segments.mem == false then "false" else "true" end' "$CONFIG_FILE")
+  show_batt=$(jq -r 'if .segments.batt == false then "false" else "true" end' "$CONFIG_FILE")
+  show_docker=$(jq -r 'if .segments.docker == false then "false" else "true" end' "$CONFIG_FILE")
+  show_model=$(jq -r 'if .segments.model == false then "false" else "true" end' "$CONFIG_FILE")
+else
+  show_disk=true
+  show_mem=true
+  show_batt=true
+  show_docker=true
+  show_model=true
+fi
+
 # Simplify path: ~/... relative to home
 dir="${dir/#$HOME/~}"
 
@@ -110,66 +126,77 @@ c_7d=$(color_usage "$r7d")
 batt_pct=""
 batt_suffix=""
 batt_color="$DIM"
-batt_raw=$(pmset -g batt 2>/dev/null)
-if [ -n "$batt_raw" ]; then
-  batt_pct=$(echo "$batt_raw" | grep -o '[0-9]\+%' | head -1 | tr -d '%')
-  if [ -n "$batt_pct" ]; then
-    batt_state=$(echo "$batt_raw" | grep -oE '(charging|discharging|charged|finishing charge|AC attached)' | head -1)
-    case "$batt_state" in
-      charging|"finishing charge") batt_suffix=" ⚡" ;;
-      charged|"AC attached")      batt_suffix=" ⚡" ;;
-      *)                           batt_suffix="" ;;
-    esac
-    if (( batt_pct > 50 )); then
-      batt_color="$GREEN"
-    elif (( batt_pct > 20 )); then
-      batt_color="$YELLOW"
-    else
-      batt_color="$RED"
+if [ "$show_batt" = "true" ]; then
+  batt_raw=$(pmset -g batt 2>/dev/null)
+  if [ -n "$batt_raw" ]; then
+    batt_pct=$(echo "$batt_raw" | grep -o '[0-9]\+%' | head -1 | tr -d '%')
+    if [ -n "$batt_pct" ]; then
+      batt_state=$(echo "$batt_raw" | grep -oE '(charging|discharging|charged|finishing charge|AC attached)' | head -1)
+      case "$batt_state" in
+        charging|"finishing charge") batt_suffix=" ⚡" ;;
+        charged|"AC attached")      batt_suffix=" ⚡" ;;
+        *)                           batt_suffix="" ;;
+      esac
+      if (( batt_pct > 50 )); then
+        batt_color="$GREEN"
+      elif (( batt_pct > 20 )); then
+        batt_color="$YELLOW"
+      else
+        batt_color="$RED"
+      fi
     fi
   fi
 fi
 
 # Docker status
-if ! command -v docker &>/dev/null; then
-  docker_text="🐳: n/a"
-elif docker ps -q &>/dev/null; then
-  container_count=$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')
-  docker_text="🐳: ${GREEN}up (${container_count})${RST}"
-else
-  docker_text="🐳: ${DIM}down${RST}"
+docker_text=""
+if [ "$show_docker" = "true" ]; then
+  if ! command -v docker &>/dev/null; then
+    docker_text="🐳: n/a"
+  elif docker ps -q &>/dev/null; then
+    container_count=$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')
+    docker_text="🐳: ${GREEN}up (${container_count})${RST}"
+  else
+    docker_text="🐳: ${DIM}down${RST}"
+  fi
 fi
 
 # Disk usage
-disk_text="disk: ?"
-disk_raw=$(df -g / 2>/dev/null | tail -1)
-if [ -n "$disk_raw" ]; then
-  disk_total=$(echo "$disk_raw" | awk '{print $2}')
-  disk_used=$(echo "$disk_raw" | awk '{print $3}')
-  disk_free=$(echo "$disk_raw" | awk '{print $4}')
-  if (( disk_total > 0 )); then
-    disk_pct=$(( disk_used * 100 / disk_total ))
-    if (( disk_free > 50 )); then
-      disk_color="$GREEN"
-    elif (( disk_free > 10 )); then
-      disk_color="$YELLOW"
-    else
-      disk_color="$RED"
+disk_text=""
+if [ "$show_disk" = "true" ]; then
+  disk_text="disk: ?"
+  disk_raw=$(df -g / 2>/dev/null | tail -1)
+  if [ -n "$disk_raw" ]; then
+    disk_total=$(echo "$disk_raw" | awk '{print $2}')
+    disk_used=$(echo "$disk_raw" | awk '{print $3}')
+    disk_free=$(echo "$disk_raw" | awk '{print $4}')
+    if (( disk_total > 0 )); then
+      disk_pct=$(( disk_used * 100 / disk_total ))
+      if (( disk_free > 50 )); then
+        disk_color="$GREEN"
+      elif (( disk_free > 10 )); then
+        disk_color="$YELLOW"
+      else
+        disk_color="$RED"
+      fi
+      disk_text="disk: ${disk_color}${disk_used}G/${disk_total}G (${disk_pct}%)${RST}"
     fi
-    disk_text="disk: ${disk_color}${disk_used}G/${disk_total}G (${disk_pct}%)${RST}"
   fi
 fi
 
 # Memory pressure
-mem_level=$(sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null)
-mem_free=$(memory_pressure -Q 2>/dev/null | grep -o '[0-9]\+%' | head -1 | tr -d '%')
-mem_used=$(( 100 - ${mem_free:-0} ))
-case "$mem_level" in
-  1)  mem_text="mem: ${GREEN}${mem_used}% (ok)${RST}" ;;
-  2)  mem_text="mem: ${YELLOW}${mem_used}% (warn)${RST}" ;;
-  4)  mem_text="mem: ${RED}${mem_used}% (critical)${RST}" ;;
-  *)  mem_text="mem: ${GREEN}${mem_used}% (ok)${RST}" ;;
-esac
+mem_text=""
+if [ "$show_mem" = "true" ]; then
+  mem_level=$(sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null)
+  mem_free=$(memory_pressure -Q 2>/dev/null | grep -o '[0-9]\+%' | head -1 | tr -d '%')
+  mem_used=$(( 100 - ${mem_free:-0} ))
+  case "$mem_level" in
+    1)  mem_text="mem: ${GREEN}${mem_used}% (ok)${RST}" ;;
+    2)  mem_text="mem: ${YELLOW}${mem_used}% (warn)${RST}" ;;
+    4)  mem_text="mem: ${RED}${mem_used}% (critical)${RST}" ;;
+    *)  mem_text="mem: ${GREEN}${mem_used}% (ok)${RST}" ;;
+  esac
+fi
 
 # Build segments
 SEP=" ${DIM}|${RST} "
@@ -177,12 +204,33 @@ SEP=" ${DIM}|${RST} "
 S_DIR="${BOLD}${CYAN}${dir##*/}${RST}${git_part}"
 S_MODEL="🧠 ${WHITE}${model}${RST}"
 S_LIMITS="ctx: ${c_ctx} · 5h: ${c_5h} · 7d: ${c_7d}"
-if [ -n "$batt_pct" ]; then
-  S_BATT="batt: ${batt_color}${batt_pct}%${batt_suffix}${RST}"
-else
-  S_BATT="batt: ${DIM}n/a${RST}"
+S_BATT=""
+if [ "$show_batt" = "true" ]; then
+  if [ -n "$batt_pct" ]; then
+    S_BATT="batt: ${batt_color}${batt_pct}%${batt_suffix}${RST}"
+  else
+    S_BATT="batt: ${DIM}n/a${RST}"
+  fi
 fi
-S_SYS="${disk_text} · ${mem_text} · ${S_BATT} · ${docker_text}"
+
+# Build S_SYS dynamically from enabled segments
+S_SYS=""
+_sys_sep=" · "
+if [ "$show_disk" = "true" ] && [ -n "$disk_text" ]; then
+  S_SYS="${disk_text}"
+fi
+if [ "$show_mem" = "true" ] && [ -n "$mem_text" ]; then
+  [ -n "$S_SYS" ] && S_SYS="${S_SYS}${_sys_sep}"
+  S_SYS="${S_SYS}${mem_text}"
+fi
+if [ "$show_batt" = "true" ] && [ -n "$S_BATT" ]; then
+  [ -n "$S_SYS" ] && S_SYS="${S_SYS}${_sys_sep}"
+  S_SYS="${S_SYS}${S_BATT}"
+fi
+if [ "$show_docker" = "true" ] && [ -n "$docker_text" ]; then
+  [ -n "$S_SYS" ] && S_SYS="${S_SYS}${_sys_sep}"
+  S_SYS="${S_SYS}${docker_text}"
+fi
 
 # Detect terminal width by finding the controlling TTY from the process tree
 TERM_WIDTH=""
@@ -215,11 +263,11 @@ esac
 if (( TERM_WIDTH >= 100 )); then
   # Wide: dir + limits on one line, system stats, model
   echo -e "${S_DIR}${SEP}${S_LIMITS}"
-  echo -e "${S_SYS}"
-  echo -e "${S_MODEL}"
+  [ -n "$S_SYS" ] && echo -e "${S_SYS}"
+  [ "$show_model" = "true" ] && echo -e "${S_MODEL}"
 else
   # Compact: essentials only
   echo -e "${S_DIR}"
   echo -e "${S_LIMITS}"
-  echo -e "${S_MODEL}"
+  [ "$show_model" = "true" ] && echo -e "${S_MODEL}"
 fi
