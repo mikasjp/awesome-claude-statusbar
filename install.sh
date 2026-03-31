@@ -7,8 +7,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_SCRIPT="$SCRIPT_DIR/src/statusline-command.sh"
+SOURCE_SKILL="$SCRIPT_DIR/src/skills/update-statusbar/SKILL.md"
 DEST_DIR="$HOME/.claude"
 DEST_SCRIPT="$DEST_DIR/statusline-command.sh"
+DEST_SKILL_DIR="$DEST_DIR/skills/update-statusbar"
 SETTINGS_FILE="$DEST_DIR/settings.json"
 SIGNATURE="@awesome-claude-statusbar"
 
@@ -196,6 +198,20 @@ if [[ -f "$SETTINGS_FILE" ]]; then
 else
   echo "{}" | jq --argjson sl "$STATUSLINE_CONFIG" '.statusLine = $sl' > "$SETTINGS_FILE"
   ok "Created ${DIM}${SETTINGS_FILE}${RST}"
+fi
+
+# ── Install skill ────────────────────────────────────────────────────────────
+
+header "🔧 Installing /update-statusbar skill"
+
+if [[ -f "$SOURCE_SKILL" ]]; then
+  mkdir -p "$DEST_SKILL_DIR"
+  cp "$SOURCE_SKILL" "$DEST_SKILL_DIR/SKILL.md"
+  ok "Installed ${DIM}${DEST_SKILL_DIR}/SKILL.md${RST}"
+  step "Run ${BOLD}/update-statusbar${RST} in Claude Code to update in the future"
+else
+  warn "Skill file not found — skipping"
+  warnings=$((warnings + 1))
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────

@@ -13,10 +13,12 @@ $ErrorActionPreference = 'Stop'
 $ScriptDir      = $PSScriptRoot
 $SrcDir         = Join-Path $ScriptDir 'src'
 $SourceScript   = Join-Path $SrcDir 'statusline-command.ps1'
+$SourceSkill    = Join-Path $SrcDir 'skills/update-statusbar/SKILL.md'
 $LibDir         = Join-Path $SrcDir 'lib'
 $DestDir        = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.claude'
 $DestScript     = Join-Path $DestDir 'statusline-command.ps1'
 $DestPlatform   = Join-Path $DestDir 'statusline-platform.ps1'
+$DestSkillDir   = Join-Path $DestDir 'skills/update-statusbar'
 $SettingsFile   = Join-Path $DestDir 'settings.json'
 $Signature      = '@awesome-claude-statusbar'
 
@@ -234,6 +236,22 @@ if (Test-Path $SettingsFile) {
 } else {
     @{ statusLine = $statusline_config } | ConvertTo-Json -Depth 10 | Set-Content $SettingsFile -Encoding UTF8
     Write-Ok "Created ${DIM}${SettingsFile}${RST}"
+}
+
+# ── Install skill ────────────────────────────────────────────────────────────
+
+Write-Header "`u{1F527} Installing /update-statusbar skill"
+
+if (Test-Path $SourceSkill) {
+    if (-not (Test-Path $DestSkillDir)) {
+        New-Item -ItemType Directory -Path $DestSkillDir -Force | Out-Null
+    }
+    Copy-Item $SourceSkill (Join-Path $DestSkillDir 'SKILL.md') -Force
+    Write-Ok "Installed ${DIM}${DestSkillDir}/SKILL.md${RST}"
+    Write-Step "Run ${BOLD}/update-statusbar${RST} in Claude Code to update in the future"
+} else {
+    Write-Warn "Skill file not found `u{2014} skipping"
+    $warnings++
 }
 
 # ── Summary ──────────────────────────────────────────────────────────────────
