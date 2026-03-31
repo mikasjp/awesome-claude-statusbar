@@ -4,6 +4,8 @@
 
 A dense, color-coded, information-packed status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) that turns your terminal into a cockpit. See everything that matters at a glance -- context usage, rate limits, git state, system health -- without leaving your flow.
 
+![Demo](demo.png)
+
 The layout adapts to your terminal width automatically:
 
 **Wide (100+ columns)**
@@ -252,3 +254,5 @@ Both versions gracefully degrade when optional tools are missing:
 ## License
 
 MIT
+
+![](https://stats.ebookhunt.pl/p/N5z4Bv2dz)
